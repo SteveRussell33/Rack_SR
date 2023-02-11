@@ -104,16 +104,16 @@ $(glfw): | glfw
 	$(MAKE) -C glfw/build
 	$(MAKE) -C glfw/build install
 
-jansson-2.12:
-	$(WGET) "https://github.com/akheron/jansson/releases/download/v2.12/jansson-2.12.tar.gz" || $(WGET) "http://www.digip.org/jansson/releases/jansson-2.12.tar.gz"
-	$(SHA256) jansson-2.12.tar.gz 5f8dec765048efac5d919aded51b26a32a05397ea207aa769ff6b53c7027d2c9
-	$(UNTAR) jansson-2.12.tar.gz
-	rm jansson-2.12.tar.gz
+jansson-2.14:
+	$(WGET) "https://github.com/akheron/jansson/releases/download/v2.14/jansson-2.14.tar.gz" || $(WGET) "http://www.digip.org/jansson/releases/jansson-2.14.tar.gz"
+	$(SHA256) jansson-2.14.tar.gz 5798d010e41cf8d76b66236cfb2f2543c8d082181d16bc3085ab49538d4b9929
+	$(UNTAR) jansson-2.14.tar.gz
+	rm jansson-2.14.tar.gz
 
-$(jansson): | jansson-2.12
-	cd jansson-2.12 && $(CONFIGURE)
-	$(MAKE) -C jansson-2.12
-	$(MAKE) -C jansson-2.12 install
+$(jansson): | jansson-2.14
+	cd jansson-2.14 && $(CONFIGURE)
+	$(MAKE) -C jansson-2.14
+	$(MAKE) -C jansson-2.14 install
 
 openssl-1.1.1k:
 	$(WGET) "https://www.openssl.org/source/openssl-1.1.1k.tar.gz"
@@ -264,7 +264,7 @@ $(simde): simde/simde
 
 # Helpers
 
-src: glew-2.1.0 glfw jansson-2.12 libsamplerate-0.1.9 openssl-1.1.1k curl-7.79.1 zstd-1.5.4 libarchive-3.4.3 rtaudio nanovg nanosvg oui-blendish osdialog
+src: glew-2.1.0 glfw jansson-2.14 libsamplerate-0.1.9 openssl-1.1.1k curl-7.79.1 zstd-1.5.4 libarchive-3.4.3 rtaudio nanovg nanosvg oui-blendish osdialog
 
 clean:
 	git clean -fdx
