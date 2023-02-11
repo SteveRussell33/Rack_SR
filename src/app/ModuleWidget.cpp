@@ -289,16 +289,16 @@ void ModuleWidget::draw(const DrawArgs& args) {
 
 void ModuleWidget::drawLayer(const DrawArgs& args, int layer) {
 	if (layer == -1) {
-		nvgBeginPath(args.vg);
-		float r = 20; // Blur radius
-		float c = 20; // Corner radius
-		math::Rect shadowBox = box.zeroPos().grow(math::Vec(10, -30));
-		math::Rect shadowOutsideBox = shadowBox.grow(math::Vec(r, r));
-		nvgRect(args.vg, RECT_ARGS(shadowOutsideBox));
-		NVGcolor shadowColor = nvgRGBAf(0, 0, 0, 0.2);
-		NVGcolor transparentColor = nvgRGBAf(0, 0, 0, 0);
-		nvgFillPaint(args.vg, nvgBoxGradient(args.vg, RECT_ARGS(shadowBox), c, r, shadowColor, transparentColor));
-		nvgFill(args.vg);
+		// nvgBeginPath(args.vg);
+		// float r = 20; // Blur radius
+		// float c = 20; // Corner radius
+		// math::Rect shadowBox = box.zeroPos().grow(math::Vec(10, -30));
+		// math::Rect shadowOutsideBox = shadowBox.grow(math::Vec(r, r));
+		// nvgRect(args.vg, RECT_ARGS(shadowOutsideBox));
+		// NVGcolor shadowColor = nvgRGBAf(0, 0, 0, 0.2);
+		// NVGcolor transparentColor = nvgRGBAf(0, 0, 0, 0);
+		// nvgFillPaint(args.vg, nvgBoxGradient(args.vg, RECT_ARGS(shadowBox), c, r, shadowColor, transparentColor));
+		// nvgFill(args.vg);
 	}
 	else {
 		Widget::drawLayer(args, layer);
@@ -438,7 +438,10 @@ void ModuleWidget::onButton(const ButtonEvent& e) {
 void ModuleWidget::onDragStart(const DragStartEvent& e) {
 	if (e.button == GLFW_MOUSE_BUTTON_LEFT) {
 		// HACK Disable FramebufferWidget redrawing subpixels while dragging
-		APP->window->fbDirtyOnSubpixelChange() = false;
+		// APP->window->fbDirtyOnSubpixelChange() = false;
+		if (!settings::lockModules) {
+			glfwSetCursor(APP->window->win, glfwCreateStandardCursor(GLFW_HAND_CURSOR));
+		}
 
 		// Clear dragRack so dragging in not enabled until mouse is moved a bit.
 		internal->dragRackPos = math::Vec(NAN, NAN);
@@ -451,6 +454,8 @@ void ModuleWidget::onDragStart(const DragStartEvent& e) {
 void ModuleWidget::onDragEnd(const DragEndEvent& e) {
 	if (e.button == GLFW_MOUSE_BUTTON_LEFT) {
 		APP->window->fbDirtyOnSubpixelChange() = true;
+
+		glfwSetCursor(APP->window->win, NULL);
 
 		// The next time the module is dragged, it should always move immediately
 		internal->dragEnabled = true;
