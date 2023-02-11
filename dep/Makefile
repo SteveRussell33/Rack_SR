@@ -144,16 +144,16 @@ $(libcurl): | $(openssl) curl-7.79.1
 	$(MAKE) -C curl-7.79.1
 	$(MAKE) -C curl-7.79.1 install
 
-zstd-1.4.5:
-	$(WGET) "https://github.com/facebook/zstd/releases/download/v1.4.5/zstd-1.4.5.tar.gz"
-	$(SHA256) zstd-1.4.5.tar.gz 98e91c7c6bf162bf90e4e70fdbc41a8188b9fa8de5ad840c401198014406ce9e
-	$(UNTAR) zstd-1.4.5.tar.gz
-	rm zstd-1.4.5.tar.gz
+zstd-1.5.4:
+ 	$(WGET) "https://github.com/facebook/zstd/releases/download/v1.5.4/zstd-1.5.4.tar.gz"
+ 	$(SHA256) zstd-1.5.4.tar.gz 0f470992aedad543126d06efab344dc5f3e171893810455787d38347343a4424
+ 	$(UNTAR) zstd-1.5.4.tar.gz
+ 	rm zstd-1.5.4.tar.gz
 
-$(zstd): | zstd-1.4.5
-	cd zstd-1.4.5/build/cmake && $(CMAKE) -DZSTD_BUILD_PROGRAMS=ON -DZSTD_BUILD_SHARED=ON -DZSTD_BUILD_STATIC=ON -DZSTD_MULTITHREAD_SUPPORT=OFF .
-	$(MAKE) -C zstd-1.4.5/build/cmake
-	$(MAKE) -C zstd-1.4.5/build/cmake install
+$(zstd): | zstd-1.5.4
+	cd zstd-1.5.4/build/cmake && $(CMAKE) -DZSTD_BUILD_PROGRAMS=ON -DZSTD_BUILD_SHARED=ON -DZSTD_BUILD_STATIC=ON -DZSTD_MULTITHREAD_SUPPORT=OFF .
+	$(MAKE) -C zstd-1.5.4/build/cmake
+	$(MAKE) -C zstd-1.5.4/build/cmake install
 
 libarchive-3.4.3:
 	$(WGET) "https://github.com/libarchive/libarchive/releases/download/v3.4.3/libarchive-3.4.3.tar.gz" || $(WGET) "https://libarchive.org/downloads/libarchive-3.4.3.tar.gz"
