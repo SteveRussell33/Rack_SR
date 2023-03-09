@@ -8,6 +8,7 @@
 #include <context.hpp>
 #include <patch.hpp>
 #include <asset.hpp>
+#include <system.hpp>
 
 
 namespace rack {
@@ -26,6 +27,7 @@ math::Vec windowSize = math::Vec(1024, 720);
 math::Vec windowPos = math::Vec(NAN, NAN);
 bool invertZoom = false;
 float pixelRatio = 0.0;
+std::string uiTheme = "dark";
 float cableOpacity = 0.5;
 float cableTension = 1.0;
 float rackBrightness = 1.0;
@@ -127,6 +129,8 @@ json_t* toJson() {
 	json_object_set_new(rootJ, "invertZoom", json_boolean(invertZoom));
 
 	json_object_set_new(rootJ, "pixelRatio", json_real(pixelRatio));
+
+	json_object_set_new(rootJ, "uiTheme", json_string(uiTheme.c_str()));
 
 	json_object_set_new(rootJ, "cableOpacity", json_real(cableOpacity));
 
@@ -286,6 +290,10 @@ void fromJson(json_t* rootJ) {
 	json_t* pixelRatioJ = json_object_get(rootJ, "pixelRatio");
 	if (pixelRatioJ)
 		pixelRatio = json_number_value(pixelRatioJ);
+
+	json_t* uiThemeJ = json_object_get(rootJ, "uiTheme");
+	if (uiThemeJ)
+		uiTheme = json_string_value(uiThemeJ);
 
 	json_t* cableOpacityJ = json_object_get(rootJ, "cableOpacity");
 	if (cableOpacityJ)
@@ -484,14 +492,17 @@ void save(std::string path) {
 	json_t* rootJ = toJson();
 	if (!rootJ)
 		return;
+	DEFER({json_decref(rootJ);});
 
-	FILE* file = std::fopen(path.c_str(), "w");
+	std::string tmpPath = path + ".tmp";
+	FILE* file = std::fopen(tmpPath.c_str(), "w");
 	if (!file)
 		return;
-	DEFER({std::fclose(file);});
 
 	json_dumpf(rootJ, file, JSON_INDENT(2));
-	json_decref(rootJ);
+	std::fclose(file);
+	system::remove(path);
+	system::rename(tmpPath, path);
 }
 
 void load(std::string path) {
@@ -508,9 +519,9 @@ void load(std::string path) {
 	json_t* rootJ = json_loadf(file, 0, &error);
 	if (!rootJ)
 		throw Exception("Settings file has invalid JSON at %d:%d %s", error.line, error.column, error.text);
+	DEFER({json_decref(rootJ);});
 
 	fromJson(rootJ);
-	json_decref(rootJ);
 }
 
 

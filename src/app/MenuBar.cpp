@@ -422,6 +422,21 @@ struct ViewButton : MenuButton {
 		menu->addChild(new ui::MenuSeparator);
 		menu->addChild(createMenuLabel("Appearance"));
 
+		static const std::vector<std::string> uiThemes = {"dark", "light", "hcdark"};
+		static const std::vector<std::string> uiThemeLabels = {"Dark", "Light", "High contrast dark"};
+		menu->addChild(createIndexSubmenuItem("Theme", uiThemeLabels,
+			[=]() -> size_t {
+				auto it = std::find(uiThemes.begin(), uiThemes.end(), settings::uiTheme);
+				if (it == uiThemes.end())
+					return -1;
+				return it - uiThemes.begin();
+			},
+			[=](size_t i) {
+				settings::uiTheme = uiThemes[i];
+				ui::refreshTheme();
+			}
+		));
+
 		menu->addChild(createBoolPtrMenuItem("Show tooltips", "", &settings::tooltips));
 
 		ZoomSlider* zoomSlider = new ZoomSlider;
@@ -472,7 +487,7 @@ struct ViewButton : MenuButton {
 		menu->addChild(knobScrollSensitivitySlider);
 
 		menu->addChild(new ui::MenuSeparator);
-		menu->addChild(createMenuLabel("Module dragging"));
+		menu->addChild(createMenuLabel("Module"));
 
 		menu->addChild(createBoolPtrMenuItem("Lock positions", "", &settings::lockModules));
 
@@ -965,7 +980,6 @@ struct MenuBar : widget::OpaqueWidget {
 		infoLabel = new InfoLabel;
 		infoLabel->box.size.x = 600;
 		infoLabel->alignment = ui::Label::RIGHT_ALIGNMENT;
-		infoLabel->color.a = 0.5;
 		layout->addChild(infoLabel);
 	}
 
@@ -979,6 +993,8 @@ struct MenuBar : widget::OpaqueWidget {
 	void step() override {
 		Widget::step();
 		infoLabel->box.size.x = box.size.x - infoLabel->box.pos.x - 5;
+		// Setting 50% alpha prevents Label from using the default UI theme color, so set the color manually here.
+		infoLabel->color = color::alpha(bndGetTheme()->regularTheme.textColor, 0.5);
 	}
 };
 
