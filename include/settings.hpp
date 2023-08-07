@@ -69,8 +69,10 @@ extern bool tooltips;
 extern bool cpuMeter;
 extern bool lockModules;
 extern bool squeezeModules;
+extern bool preferDarkPanels;
 /** Maximum screen redraw frequency in Hz, or 0 for unlimited. */
 extern float frameRateLimit;
+/** Interval between autosaves in seconds. */
 extern float autosaveInterval;
 extern bool skipLoadOnLaunch;
 extern std::list<std::string> recentPatchPaths;

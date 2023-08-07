@@ -1,5 +1,5 @@
 #include <app/SvgPanel.hpp>
-#include <settings.hpp>
+#include <context.hpp>
 
 
 namespace rack {
@@ -32,20 +32,28 @@ void SvgPanel::step() {
 	if (APP->window->pixelRatio < 2.0) {
 		// Small details draw poorly at low DPI, so oversample when drawing to the framebuffer
 		fb->oversample = 2.0;
-	} else {
+	}
+	else {
 		fb->oversample = 1.0;
 	}
 
 	Widget::step();
 }
 
+
 void SvgPanel::setBackground(std::shared_ptr<window::Svg> svg) {
+	if (svg == this->svg)
+		return;
 	this->svg = svg;
 
 	sw->setSvg(svg);
+
+	// Round framebuffer size to nearest grid
 	fb->box.size = sw->box.size.div(RACK_GRID_SIZE).round().mult(RACK_GRID_SIZE);
 	panelBorder->box.size = fb->box.size;
 	box.size = fb->box.size;
+
+	fb->setDirty();
 }
 
 

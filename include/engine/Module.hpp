@@ -152,7 +152,9 @@ struct Module {
 	template <class TSwitchQuantity = SwitchQuantity>
 	TSwitchQuantity* configSwitch(int paramId, float minValue, float maxValue, float defaultValue, std::string name = "", std::vector<std::string> labels = {}) {
 		TSwitchQuantity* sq = configParam<TSwitchQuantity>(paramId, minValue, maxValue, defaultValue, name);
-		sq->labels = labels;
+		sq->ParamQuantity::snapEnabled = true;
+		sq->ParamQuantity::smoothEnabled = false;
+		sq->SwitchQuantity::labels = labels;
 		return sq;
 	}
 
@@ -162,7 +164,9 @@ struct Module {
 	template <class TSwitchQuantity = SwitchQuantity>
 	TSwitchQuantity* configButton(int paramId, std::string name = "") {
 		TSwitchQuantity* sq = configParam<TSwitchQuantity>(paramId, 0.f, 1.f, 0.f, name);
-		sq->randomizeEnabled = false;
+		sq->ParamQuantity::snapEnabled = true;
+		sq->ParamQuantity::smoothEnabled = false;
+		sq->ParamQuantity::randomizeEnabled = false;
 		return sq;
 	}
 
@@ -305,7 +309,7 @@ struct Module {
 		return rightExpander;
 	}
 	/** Returns the left Expander for `side = 0` and the right Expander for `side = 1`. */
-	Expander& getExpander(int side) {
+	Expander& getExpander(uint8_t side) {
 		return side ? rightExpander : leftExpander;
 	}
 
@@ -416,8 +420,8 @@ struct Module {
 	}
 
 	struct ExpanderChangeEvent {
-		/** False for left, true for right. */
-		bool side;
+		/** 0 for left, 1 for right. */
+		uint8_t side;
 	};
 	/** Called after an expander is added, removed, or changed on either the left or right side of the Module.
 	*/

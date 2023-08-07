@@ -202,6 +202,9 @@ struct ModelBox : widget::OpaqueWidget {
 		mwc->addChild(moduleWidget);
 		mwc->box.size = moduleWidget->box.size;
 
+		// Step ModuleWidget so it can set its default appearance.
+		moduleWidget->step();
+
 		updateZoom();
 	}
 
@@ -469,6 +472,7 @@ struct Browser : widget::OpaqueWidget {
 	std::string brand;
 	std::set<int> tagIds = {};
 	bool favorite = false;
+	bool lastPreferDarkPanels = false;
 
 	// Caches and temporary state
 	std::map<plugin::Model*, float> prefilteredModelScores;
@@ -599,6 +603,14 @@ struct Browser : widget::OpaqueWidget {
 		modelMargin->box.size.x = modelScroll->box.size.x;
 		modelMargin->box.size.y = modelContainer->box.size.y + margin;
 		modelContainer->box.size.x = modelMargin->box.size.x - margin;
+
+		// Check if preferDarkPanels has changed
+		if (settings::preferDarkPanels != lastPreferDarkPanels) {
+			lastPreferDarkPanels = settings::preferDarkPanels;
+			// Request module framebuffers to re-render
+			Widget::DirtyEvent eDirty;
+			modelContainer->onDirty(eDirty);
+		}
 
 		OpaqueWidget::step();
 	}

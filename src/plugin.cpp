@@ -103,14 +103,7 @@ static InitCallback loadPluginCallback(Plugin* plugin) {
 	libraryExt = "dylib";
 #endif
 
-#if defined ARCH_X64
-	// Use `plugin.EXT` on x64 for backward compatibility.
-	// Change to `plugin-OS-CPU.EXT` in Rack 3.
 	std::string libraryFilename = "plugin." + libraryExt;
-#else
-	// Use `plugin-CPU.EXT` on other CPUs like ARM64
-	std::string libraryFilename = "plugin-" + APP_CPU + "." + libraryExt;
-#endif
 	std::string libraryPath = system::join(plugin->path, libraryFilename);
 
 	// Check file existence
@@ -260,9 +253,23 @@ void init() {
 	// Load Core
 	loadPlugin("");
 
-	pluginsPath = asset::user("plugins");
-
 	// Get user plugins directory
+	if (settings::devMode) {
+		pluginsPath = asset::user("plugins");
+	}
+	else {
+		pluginsPath = asset::user("plugins-" + APP_OS + "-" + APP_CPU);
+	}
+
+	// In Rack <2.4.0, plugins dir was "plugins" regardless of arch.
+	// Rename old dir if running x64.
+#if defined ARCH_X64
+	std::string oldPluginsPath = asset::user("plugins");
+	if (system::isDirectory(oldPluginsPath)) {
+		system::rename(oldPluginsPath, pluginsPath);
+	}
+#endif
+
 	system::createDirectory(pluginsPath);
 
 	// Don't load plugins if safe mode is enabled
@@ -358,6 +365,7 @@ static const std::map<std::string, std::string> pluginSlugFallbacks = {
 	{"AudibleInstrumentsPreview", "AudibleInstruments"},
 	{"SequelSequencers", "DanielDavies"},
 	{"DelexanderVol1", "DelexandraVol1"},
+	{"VCV-Pro", "Fundamental"},
 	// {"", ""},
 };
 
