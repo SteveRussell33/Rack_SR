@@ -21,22 +21,29 @@ SvgKnob::SvgKnob() {
 }
 
 void SvgKnob::setSvg(std::shared_ptr<window::Svg> svg) {
+	if (svg == sw->svg)
+		return;
+
 	sw->setSvg(svg);
 	tw->box.size = sw->box.size;
 	fb->box.size = sw->box.size;
 	box.size = sw->box.size;
+
 	shadow->box.size = sw->box.size;
 	// Move shadow downward by 10%
 	shadow->box.pos = math::Vec(0, sw->box.size.y * 0.10);
 	// shadow->box = shadow->box.grow(math::Vec(2, 2));
+
+	fb->setDirty();
 }
 
 void SvgKnob::onChange(const ChangeEvent& e) {
-	// Re-transform the widget::TransformWidget
+	float angle = 0.f;
+
+	// Calculate angle from value
 	engine::ParamQuantity* pq = getParamQuantity();
 	if (pq) {
 		float value = pq->getValue();
-		float angle;
 		if (!pq->isBounded()) {
 			// Number of rotations equals value for unbounded range
 			angle = value * (2 * M_PI);
@@ -50,14 +57,16 @@ void SvgKnob::onChange(const ChangeEvent& e) {
 			angle = math::rescale(value, pq->getMinValue(), pq->getMaxValue(), minAngle, maxAngle);
 		}
 		angle = std::fmod(angle, 2 * M_PI);
-		tw->identity();
-		// Rotate SVG
-		math::Vec center = sw->box.getCenter();
-		tw->translate(center);
-		tw->rotate(angle);
-		tw->translate(center.neg());
-		fb->dirty = true;
 	}
+
+	tw->identity();
+	// Rotate SVG
+	math::Vec center = sw->box.getCenter();
+	tw->translate(center);
+	tw->rotate(angle);
+	tw->translate(center.neg());
+	fb->setDirty();
+
 	Knob::onChange(e);
 }
 

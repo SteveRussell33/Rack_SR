@@ -358,6 +358,7 @@ Window::Window() {
 
 	if (APP->scene) {
 		widget::Widget::ContextCreateEvent e;
+		e.vg = vg;
 		APP->scene->onContextCreate(e);
 	}
 }
@@ -366,6 +367,7 @@ Window::Window() {
 Window::~Window() {
 	if (APP->scene) {
 		widget::Widget::ContextDestroyEvent e;
+		e.vg = vg;
 		APP->scene->onContextDestroy(e);
 	}
 
@@ -562,6 +564,11 @@ void Window::screenshot(const std::string& screenshotPath) {
 
 
 void Window::screenshotModules(const std::string& screenshotsDir, float zoom) {
+	// Disable preferDarkPanels
+	bool preferDarkPanels = settings::preferDarkPanels;
+	settings::preferDarkPanels = false;
+	DEFER({settings::preferDarkPanels = preferDarkPanels;});
+
 	// Iterate plugins and create directories
 	system::createDirectories(screenshotsDir);
 	for (plugin::Plugin* p : plugin::plugins) {

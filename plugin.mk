@@ -24,10 +24,6 @@ LDFLAGS += -L$(RACK_DIR) -lRack
 include $(RACK_DIR)/arch.mk
 
 TARGET := plugin
-ifndef ARCH_X64
-	# On non-x64, append CPU name to plugin binary
-	TARGET := $(TARGET)-$(ARCH_CPU)
-endif
 
 ifdef ARCH_LIN
 	TARGET := $(TARGET).so
@@ -52,6 +48,7 @@ ifdef ARCH_WIN
 	RACK_USER_DIR ?= $(USERPROFILE)/Documents/Rack2
 endif
 
+PLUGINS_DIR := $(RACK_USER_DIR)/plugins-$(ARCH_OS)-$(ARCH_CPU)
 
 DEP_FLAGS += -fPIC
 include $(RACK_DIR)/dep.mk
@@ -69,7 +66,7 @@ ZSTD_COMPRESSION_LEVEL ?= 19
 dist: all
 	rm -rf dist
 	mkdir -p dist/$(SLUG)
-	@# Strip and copy plugin binary
+	@# Strip symbols from binary
 	cp $(TARGET) dist/$(SLUG)/
 ifdef ARCH_MAC
 	$(STRIP) -S dist/$(SLUG)/$(TARGET)
@@ -77,6 +74,10 @@ ifdef ARCH_MAC
 	$(OTOOL) -L dist/$(SLUG)/$(TARGET)
 else
 	$(STRIP) -s dist/$(SLUG)/$(TARGET)
+endif
+	@# Sign binary if CODESIGN is defined
+ifdef CODESIGN
+	$(CODESIGN) dist/$(SLUG)/$(TARGET)
 endif
 	@# Copy distributables
 ifdef ARCH_MAC
@@ -88,8 +89,8 @@ endif
 	cd dist && tar -c $(SLUG) | zstd -$(ZSTD_COMPRESSION_LEVEL) -o "$(SLUG)"-"$(VERSION)"-$(ARCH_NAME).vcvplugin
 
 install: dist
-	mkdir -p "$(RACK_USER_DIR)"/plugins/
-	cp dist/*.vcvplugin "$(RACK_USER_DIR)"/plugins/
+	mkdir -p "$(PLUGINS_DIR)"
+	cp dist/*.vcvplugin "$(PLUGINS_DIR)"/
 
 .PHONY: clean dist
 .DEFAULT_GOAL := all

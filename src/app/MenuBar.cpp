@@ -487,11 +487,13 @@ struct ViewButton : MenuButton {
 		menu->addChild(knobScrollSensitivitySlider);
 
 		menu->addChild(new ui::MenuSeparator);
-		menu->addChild(createMenuLabel("Module"));
+		menu->addChild(createMenuLabel("Modules"));
 
 		menu->addChild(createBoolPtrMenuItem("Lock positions", "", &settings::lockModules));
 
-		menu->addChild(createBoolPtrMenuItem("Auto-squeeze algorithm (experimental)", "", &settings::squeezeModules));
+		menu->addChild(createBoolPtrMenuItem("Smart rearrangement", "", &settings::squeezeModules));
+
+		menu->addChild(createBoolPtrMenuItem("Use dark panels if available (experimental)", "", &settings::preferDarkPanels));
 	}
 };
 
@@ -662,25 +664,36 @@ struct SyncUpdateItem : ui::MenuItem {
 			return NULL;
 		library::UpdateInfo update = it->second;
 
-		if (update.changelogUrl == "")
-			return NULL;
-
 		ui::Menu* menu = new ui::Menu;
 
-		std::string changelogUrl = update.changelogUrl;
-		menu->addChild(createMenuItem("Changelog", "", [=]() {
-			system::openBrowser(changelogUrl);
-		}));
+		if (update.minRackVersion != "") {
+			menu->addChild(createMenuLabel(string::f("Requires Rack %s+", update.minRackVersion.c_str())));
+		}
 
+		if (update.changelogUrl != "") {
+			std::string changelogUrl = update.changelogUrl;
+			menu->addChild(createMenuItem("Changelog", "", [=]() {
+				system::openBrowser(changelogUrl);
+			}));
+		}
+
+		if (menu->children.empty()) {
+			delete menu;
+			return NULL;
+		}
 		return menu;
 	}
 
 	void step() override {
-		disabled = library::isSyncing;
+		if (library::isSyncing)
+			disabled = true;
 
 		auto it = library::updateInfos.find(slug);
 		if (it != library::updateInfos.end()) {
 			library::UpdateInfo update = it->second;
+
+			if (update.minRackVersion != "")
+				disabled = true;
 
 			if (update.downloaded) {
 				rightText = CHECKMARK_STRING;
@@ -761,6 +774,10 @@ struct LibraryMenu : ui::Menu {
 				library::logOut();
 			}));
 
+			addChild(createMenuItem("Account settings", "", [=]() {
+				system::openBrowser("https://vcvrack.com/account");
+			}));
+
 			addChild(createMenuItem("Browse VCV Library", "", [=]() {
 				system::openBrowser("https://library.vcvrack.com/");
 			}));
@@ -796,12 +813,15 @@ struct LibraryButton : MenuButton {
 		ui::Menu* menu = createMenu<LibraryMenu>();
 		menu->cornerFlags = BND_CORNER_TOP;
 		menu->box.pos = getAbsoluteOffset(math::Vec(0, box.size.y));
+
 		// Check for updates when menu is opened
-		std::thread t([&]() {
-			system::setThreadName("Library");
-			library::checkUpdates();
-		});
-		t.detach();
+		if (!settings::devMode) {
+			std::thread t([&]() {
+				system::setThreadName("Library");
+				library::checkUpdates();
+			});
+			t.detach();
+		}
 	}
 
 	void step() override {
