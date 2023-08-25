@@ -783,6 +783,12 @@ struct PJ301MPort : app::SvgPort {
 	}
 };
 
+struct DarkPJ301MPort : app::SvgPort {
+	DarkPJ301MPort() {
+		setSvg(Svg::load(asset::system("res/ComponentLibrary/PJ301M-dark.svg")));
+	}
+};
+
 struct ThemedPJ301MPort : app::ThemedSvgPort {
 	ThemedPJ301MPort() {
 		setSvg(Svg::load(asset::system("res/ComponentLibrary/PJ301M.svg")), Svg::load(asset::system("res/ComponentLibrary/PJ301M-dark.svg")));
@@ -880,23 +886,26 @@ struct VCVLatch : VCVButton {
 	}
 };
 
-/** Looks best with MediumSimpleLight<WhiteLight> or a color of your choice.
-*/
-template <typename TLight>
-struct VCVLightButton : VCVButton {
+template <typename TBase, typename TLight = WhiteLight>
+struct LightButton : TBase {
 	app::ModuleLightWidget* light;
 
-	VCVLightButton() {
+	LightButton() {
 		light = new TLight;
 		// Move center of light to center of box
-		light->box.pos = box.size.div(2).minus(light->box.size.div(2));
-		addChild(light);
+		light->box.pos = this->box.size.div(2).minus(light->box.size.div(2));
+		this->addChild(light);
 	}
 
 	app::ModuleLightWidget* getLight() {
 		return light;
 	}
 };
+
+template <typename TLight = WhiteLight>
+using VCVLightButton = LightButton<VCVButton, TLight>;
+
+/** Deprecated alias */
 template <typename TLight>
 using LEDLightButton = VCVLightButton<TLight>;
 
