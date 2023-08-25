@@ -107,5 +107,5 @@ ifdef ARCH_MAC
 	xxd -i $< | $(CC) $(MAC_SDK_FLAGS) -c -o $@ -xc -
 endif
 
-build/%.html: %.md
-	markdown $< > $@
+#build/%.html: %.md
+#	markdown $< > $@
