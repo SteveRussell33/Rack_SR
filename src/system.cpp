@@ -1,6 +1,7 @@
 #include <thread>
 #include <regex>
 #include <chrono>
+#include <cfenv> // for std::fesetround
 #include <ghc/filesystem.hpp>
 
 #include <dirent.h>
@@ -29,6 +30,8 @@
 	#include <processthreadsapi.h>
 	#include <dbghelp.h>
 #endif
+
+#include <simd/common.hpp> // for _mm_getcsr etc
 
 #include <archive.h>
 #include <archive_entry.h>
@@ -864,7 +867,7 @@ std::string getOperatingSystemInfo() {
 
 	// Try to match version numbers to retail versions
 	if (major >= 20) {
-		if (major >= 22) {
+		if (major == 22) {
 			minor -= 1;
 		}
 		major -= 9;
@@ -947,6 +950,49 @@ void runProcessDetached(const std::string& path) {
 	// Not implemented on Linux or Mac
 	assert(0);
 #endif
+}
+
+
+uint32_t getFpuFlags() {
+#if defined ARCH_X64
+	return _mm_getcsr();
+#elif defined ARCH_ARM64
+	uint64_t fpcr;
+	__asm__ volatile("mrs %0, fpcr" : "=r" (fpcr));
+	return fpcr;
+#endif
+}
+
+void setFpuFlags(uint32_t flags) {
+#if defined ARCH_X64
+	_mm_setcsr(flags);
+#elif defined ARCH_ARM64
+	uint64_t fpcr = flags;
+	__asm__ volatile("msr fpcr, %0" :: "r" (fpcr));
+#endif
+}
+
+void resetFpuFlags() {
+	uint32_t flags = getFpuFlags();
+
+#if defined ARCH_X64
+	// Set CPU to flush-to-zero (FTZ) and denormals-are-zero (DAZ) mode
+	// https://software.intel.com/en-us/node/682949
+	// _MM_SET_FLUSH_ZERO_MODE(_MM_FLUSH_ZERO_ON);
+	flags |= 0x8000;
+	// _MM_SET_DENORMALS_ZERO_MODE(_MM_DENORMALS_ZERO_ON);
+	flags |= 0x0040;
+	// Round-to-nearest is default
+	flags &= ~0x6000;
+#elif defined ARCH_ARM64
+	// Set Flush-to-Zero
+	flags |= 1 << 24;
+	// ARM64 always uses DAZ
+	// Round-to-nearest is default
+	flags &= ~((1 << 22) | (1 << 23));
+#endif
+
+	setFpuFlags(flags);
 }
 
 

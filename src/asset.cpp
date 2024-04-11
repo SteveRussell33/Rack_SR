@@ -23,10 +23,16 @@
 #include <plugin/Plugin.hpp>
 #include <engine/Module.hpp>
 #include <app/common.hpp>
+#include <osdialog.h>
 
 
 namespace rack {
 namespace asset {
+
+
+#if defined ARCH_MAC
+std::string getApplicationSupportDir();
+#endif
 
 
 static void initSystemDir() {
@@ -39,9 +45,9 @@ static void initSystemDir() {
 	}
 
 	// Environment variable overrides
-	const char* env = getenv("RACK_SYSTEM_DIR");
-	if (env) {
-		systemDir = env;
+	const char* envSystem = getenv("RACK_SYSTEM_DIR");
+	if (envSystem) {
+		systemDir = envSystem;
 		return;
 	}
 
@@ -93,42 +99,90 @@ static void initUserDir() {
 	}
 
 	// Environment variable overrides
-	const char* env = getenv("RACK_USER_DIR");
-	if (env) {
-		userDir = env;
+	const char* envUser = getenv("RACK_USER_DIR");
+	if (envUser) {
+		userDir = envUser;
 		return;
 	}
 
+	std::string oldUserDir;
+
 #if defined ARCH_WIN
-	// Get "My Documents" path
-	wchar_t documentsBufW[MAX_PATH] = L".";
-	HRESULT result = SHGetFolderPathW(NULL, CSIDL_MYDOCUMENTS, NULL, SHGFP_TYPE_CURRENT, documentsBufW);
-	assert(result == S_OK);
-	userDir = system::join(string::UTF16toUTF8(documentsBufW), "Rack" + APP_VERSION_MAJOR);
+	// Get AppData/Local path
+	WCHAR localBufW[MAX_PATH] = {};
+	HRESULT localH = SHGetFolderPathW(NULL, CSIDL_LOCAL_APPDATA, NULL, SHGFP_TYPE_CURRENT, localBufW);
+	assert(SUCCEEDED(localH));
+	std::string localDir = string::UTF16toUTF8(localBufW);
+
+	// Usually C:/Users/<username>/AppData/Local/Rack2
+	userDir = system::join(localDir, "Rack" + APP_VERSION_MAJOR);
+
+	// Get Documents path
+	WCHAR documentsBufW[MAX_PATH] = {};
+	HRESULT documentsH = SHGetFolderPathW(NULL, CSIDL_MYDOCUMENTS, NULL, SHGFP_TYPE_CURRENT, documentsBufW);
+	assert(SUCCEEDED(documentsH));
+	std::string documentsDir = string::UTF16toUTF8(documentsBufW);
+
+	// Rack <2.5.0 used "My Documents/Rack2"
+	oldUserDir = system::join(documentsDir, "Rack" + APP_VERSION_MAJOR);
 #endif
+
 #if defined ARCH_MAC
+	// Usually ~/Library/Application Support/Rack2
+	userDir = system::join(getApplicationSupportDir(), "Rack" + APP_VERSION_MAJOR);
+
 	// Get home directory
 	struct passwd* pw = getpwuid(getuid());
 	assert(pw);
-	userDir = system::join(pw->pw_dir, "Documents", "Rack" + APP_VERSION_MAJOR);
+	std::string homeDir = pw->pw_dir;
+
+	// Rack <2.5.0 used ~/Documents/Rack2
+	oldUserDir = system::join(homeDir, "Documents", "Rack" + APP_VERSION_MAJOR);
 #endif
+
 #if defined ARCH_LIN
-	// Get home directory
+	// Get home path
 	const char* homeBuf = getenv("HOME");
 	if (!homeBuf) {
 		struct passwd* pw = getpwuid(getuid());
 		assert(pw);
 		homeBuf = pw->pw_dir;
 	}
-	userDir = system::join(homeBuf, ".Rack" + APP_VERSION_MAJOR);
+	std::string homeDir = homeBuf;
+
+	// Get XDG data path
+	const char* envData = getenv("XDG_DATA_HOME");
+	if (envData) {
+		userDir = envData;
+	}
+	else {
+		userDir = system::join(homeDir, ".local", "share");
+	}
+	// Usually ~/.local/share/Rack2
+	userDir = system::join(userDir, "Rack" + APP_VERSION_MAJOR);
+
+	// Rack <2.5.0 used ~/.Rack2
+	oldUserDir = system::join(homeDir, ".Rack" + APP_VERSION_MAJOR);
 #endif
+
+	// If userDir doesn't exist but oldUserDir does, move it and inform user.
+	if (!oldUserDir.empty() && !system::isDirectory(userDir) && system::isDirectory(oldUserDir)) {
+		system::rename(oldUserDir, userDir);
+		std::string msg = APP_NAME + "'s user folder has been moved from";
+		msg += "\n" + oldUserDir;
+		msg += "\nto";
+		msg += "\n" + userDir;
+		osdialog_message(OSDIALOG_INFO, OSDIALOG_OK, msg.c_str());
+	}
+
+	// Create user dir if it doesn't exist
+	system::createDirectory(userDir);
 }
+
 
 void init() {
 	initSystemDir();
 	initUserDir();
-
-	system::createDirectory(userDir);
 }
 
 

@@ -5,9 +5,6 @@
 #include <mutex>
 #include <atomic>
 #include <tuple>
-#if defined ARCH_X64
-	#include <pmmintrin.h>
-#endif
 
 #include <engine/Engine.hpp>
 #include <settings.hpp>
@@ -17,22 +14,11 @@
 #include <patch.hpp>
 #include <plugin.hpp>
 #include <mutex.hpp>
+#include <simd/common.hpp>
 
 
 namespace rack {
 namespace engine {
-
-
-#if defined ARCH_X64
-static void initMXCSR() {
-	// Set CPU to flush-to-zero (FTZ) and denormals-are-zero (DAZ) mode
-	// https://software.intel.com/en-us/node/682949
-	_MM_SET_FLUSH_ZERO_MODE(_MM_FLUSH_ZERO_ON);
-	_MM_SET_DENORMALS_ZERO_MODE(_MM_DENORMALS_ZERO_ON);
-	// Reset other flags
-	_MM_SET_ROUNDING_MODE(_MM_ROUND_NEAREST);
-}
-#endif
 
 
 /** Barrier based on mutexes.
@@ -198,6 +184,10 @@ struct Engine::Internal {
 	std::map<int64_t, Cable*> cablesCache;
 	// (moduleId, paramId)
 	std::map<std::tuple<int64_t, int>, ParamHandle*> paramHandlesCache;
+	/** Cache of cables connected to each input
+	Only connected inputs are allowed.
+	*/
+	std::map<Input*, std::vector<Cable*>> inputCablesCache;
 
 	float sampleRate = 0.f;
 	float sampleTime = 0.f;
@@ -245,25 +235,20 @@ struct Engine::Internal {
 
 
 static void Engine_updateExpander_NoLock(Engine* that, Module* module, uint8_t side) {
-	Module::Expander& expander = side ? module->rightExpander : module->leftExpander;
-	Module* oldExpanderModule = expander.module;
+	Module::Expander& expander = module->getExpander(side);
 
 	if (expander.moduleId >= 0) {
+		// Check if moduleId has changed from current module
 		if (!expander.module || expander.module->id != expander.moduleId) {
-			expander.module = that->getModule_NoLock(expander.moduleId);
+			Module* expanderModule = that->getModule_NoLock(expander.moduleId);
+			module->setExpanderModule(expanderModule, side);
 		}
 	}
 	else {
+		// Check if moduleId has unset module
 		if (expander.module) {
-			expander.module = NULL;
+			module->setExpanderModule(NULL, side);
 		}
-	}
-
-	if (expander.module != oldExpanderModule) {
-		// Dispatch ExpanderChangeEvent
-		Module::ExpanderChangeEvent e;
-		e.side = side;
-		module->onExpanderChange(e);
 	}
 }
 
@@ -333,27 +318,6 @@ static void Engine_stepWorker(Engine* that, int threadId) {
 }
 
 
-static void Cable_step(Cable* that) {
-	Output* output = &that->outputModule->outputs[that->outputId];
-	Input* input = &that->inputModule->inputs[that->inputId];
-	// Match number of polyphonic channels to output port
-	int channels = output->channels;
-	// Copy all voltages from output to input
-	for (int c = 0; c < channels; c++) {
-		float v = output->voltages[c];
-		// Set 0V if infinite or NaN
-		if (!std::isfinite(v))
-			v = 0.f;
-		input->voltages[c] = v;
-	}
-	// Set higher channel voltages to 0
-	for (int c = channels; c < input->channels; c++) {
-		input->voltages[c] = 0.f;
-	}
-	input->channels = channels;
-}
-
-
 /** Steps a single frame
 */
 static void Engine_stepFrame(Engine* that) {
@@ -380,9 +344,49 @@ static void Engine_stepFrame(Engine* that) {
 		}
 	}
 
-	// Step cables
-	for (Cable* cable : that->internal->cables) {
-		Cable_step(cable);
+	// Step modules along with workers
+	internal->workerModuleIndex = 0;
+	internal->engineBarrier.wait();
+	Engine_stepWorker(that, 0);
+	internal->workerBarrier.wait();
+
+	// Step cables for each input
+	for (const auto& pair : internal->inputCablesCache) {
+		Input* input = pair.first;
+		const std::vector<Cable*>& cables = pair.second;
+		// Clear input voltages up to old number of input channels
+		for (int c = 0; c < input->channels; c++) {
+			input->voltages[c] = 0.f;
+		}
+		// Find max number of channels
+		uint8_t channels = 1;
+		for (Cable* cable : cables) {
+			Output* output = &cable->outputModule->outputs[cable->outputId];
+			channels = std::max(channels, output->channels);
+		}
+		input->channels = channels;
+		// Sum all outputs to input value
+		for (Cable* cable : cables) {
+			Output* output = &cable->outputModule->outputs[cable->outputId];
+
+			auto finitize = [](float x) {
+				return std::isfinite(x) ? x : 0.f;
+			};
+
+			// Sum monophonic value to all input channels
+			if (output->channels == 1) {
+				float value = finitize(output->voltages[0]);
+				for (int c = 0; c < channels; c++) {
+					input->voltages[c] += value;
+				}
+			}
+			// Sum polyphonic values to each input channel
+			else {
+				for (int c = 0; c < output->channels; c++) {
+					input->voltages[c] += finitize(output->voltages[c]);
+				}
+			}
+		}
 	}
 
 	// Flip messages for each module
@@ -397,60 +401,7 @@ static void Engine_stepFrame(Engine* that) {
 		}
 	}
 
-	// Step modules along with workers
-	internal->workerModuleIndex = 0;
-	internal->engineBarrier.wait();
-	Engine_stepWorker(that, 0);
-	internal->workerBarrier.wait();
-
 	internal->frame++;
-}
-
-
-static void Port_setDisconnected(Port* that) {
-	that->channels = 0;
-	for (int c = 0; c < PORT_MAX_CHANNELS; c++) {
-		that->voltages[c] = 0.f;
-	}
-}
-
-
-static void Port_setConnected(Port* that) {
-	if (that->channels > 0)
-		return;
-	that->channels = 1;
-}
-
-
-static void Engine_updateConnected(Engine* that) {
-	// Find disconnected ports
-	std::set<Port*> disconnectedPorts;
-	for (Module* module : that->internal->modules) {
-		for (Input& input : module->inputs) {
-			disconnectedPorts.insert(&input);
-		}
-		for (Output& output : module->outputs) {
-			disconnectedPorts.insert(&output);
-		}
-	}
-	for (Cable* cable : that->internal->cables) {
-		// Connect input
-		Input& input = cable->inputModule->inputs[cable->inputId];
-		auto inputIt = disconnectedPorts.find(&input);
-		if (inputIt != disconnectedPorts.end())
-			disconnectedPorts.erase(inputIt);
-		Port_setConnected(&input);
-		// Connect output
-		Output& output = cable->outputModule->outputs[cable->outputId];
-		auto outputIt = disconnectedPorts.find(&output);
-		if (outputIt != disconnectedPorts.end())
-			disconnectedPorts.erase(outputIt);
-		Port_setConnected(&output);
-	}
-	// Disconnect ports that have no cable
-	for (Port* port : disconnectedPorts) {
-		Port_setDisconnected(port);
-	}
 }
 
 
@@ -537,10 +488,7 @@ void Engine::stepBlock(int frames) {
 	std::lock_guard<std::mutex> stepLock(internal->blockMutex);
 	SharedLock<SharedMutex> lock(internal->mutex);
 	// Configure thread
-#if defined ARCH_X64
-	uint32_t csr = _mm_getcsr();
-	initMXCSR();
-#endif
+	system::resetFpuFlags();
 	random::init();
 
 	internal->blockFrame = internal->frame;
@@ -549,8 +497,8 @@ void Engine::stepBlock(int frames) {
 
 	// Update expander pointers
 	for (Module* module : internal->modules) {
-		Engine_updateExpander_NoLock(this, module, false);
-		Engine_updateExpander_NoLock(this, module, true);
+		Engine_updateExpander_NoLock(this, module, 0);
+		Engine_updateExpander_NoLock(this, module, 1);
 	}
 
 	// Launch workers
@@ -582,11 +530,6 @@ void Engine::stepBlock(int frames) {
 		internal->meterTotal = 0.0;
 		internal->meterMax = 0.0;
 	}
-
-#if defined ARCH_X64
-	// Reset MXCSR back to original value
-	_mm_setcsr(csr);
-#endif
 }
 
 
@@ -745,6 +688,11 @@ std::vector<int64_t> Engine::getModuleIds() {
 
 void Engine::addModule(Module* module) {
 	std::lock_guard<SharedMutex> lock(internal->mutex);
+	addModule_NoLock(module);
+}
+
+
+void Engine::addModule_NoLock(Module* module) {
 	assert(module);
 	// Check that the module is not already added
 	auto it = std::find(internal->modules.begin(), internal->modules.end(), module);
@@ -807,23 +755,25 @@ void Engine::removeModule_NoLock(Module* module) {
 	}
 	// Update expanders of other modules
 	for (Module* m : internal->modules) {
-		if (m->leftExpander.module == module) {
-			m->leftExpander.moduleId = -1;
-			m->leftExpander.module = NULL;
+		for (uint8_t side = 0; side < 2; side++) {
+			Module::Expander& expander = m->getExpander(!side);
+			if (expander.moduleId == module->id) {
+				expander.moduleId = -1;
+			}
+			if (expander.module == module) {
+				m->setExpanderModule(NULL, !side);
+			}
 		}
-		if (m->rightExpander.module == module) {
-			m->rightExpander.moduleId = -1;
-			m->rightExpander.module = NULL;
-		}
+	}
+	// Update expanders of this module
+	for (uint8_t side = 0; side < 2; side++) {
+		Module::Expander& expander = module->getExpander(side);
+		expander.moduleId = -1;
+		module->setExpanderModule(NULL, side);
 	}
 	// Remove module
 	internal->modulesCache.erase(module->id);
 	internal->modules.erase(it);
-	// Reset expanders
-	module->leftExpander.moduleId = -1;
-	module->leftExpander.module = NULL;
-	module->rightExpander.moduleId = -1;
-	module->rightExpander.module = NULL;
 }
 
 
@@ -842,6 +792,8 @@ Module* Engine::getModule(int64_t moduleId) {
 
 
 Module* Engine::getModule_NoLock(int64_t moduleId) {
+	if (moduleId < 0)
+		return NULL;
 	auto it = internal->modulesCache.find(moduleId);
 	if (it == internal->modulesCache.end())
 		return NULL;
@@ -953,32 +905,50 @@ std::vector<int64_t> Engine::getCableIds() {
 
 void Engine::addCable(Cable* cable) {
 	std::lock_guard<SharedMutex> lock(internal->mutex);
+	addCable_NoLock(cable);
+}
+
+
+void Engine::addCable_NoLock(Cable* cable) {
 	assert(cable);
 	// Check cable properties
 	assert(cable->inputModule);
 	assert(cable->outputModule);
+	Input& input = cable->inputModule->inputs[cable->inputId];
+	Output& output = cable->outputModule->outputs[cable->outputId];
+	bool inputWasConnected = false;
 	bool outputWasConnected = false;
 	for (Cable* cable2 : internal->cables) {
 		// Check that the cable is not already added
 		assert(cable2 != cable);
-		// Check that the input is not already used by another cable
-		assert(!(cable2->inputModule == cable->inputModule && cable2->inputId == cable->inputId));
-		// Get connected status of output, to decide whether we need to call a PortChangeEvent.
-		// It's best to not trust `cable->outputModule->outputs[cable->outputId]->isConnected()`
+		// Check that cable isn't similar to another cable
+		// assert(!(cable2->inputModule == cable->inputModule && cable2->inputId == cable->inputId && cable2->outputModule == cable->outputModule && cable2->outputId == cable->outputId));
+		// Check if input is already connected to a cable
+		if (cable2->inputModule == cable->inputModule && cable2->inputId == cable->inputId)
+			inputWasConnected = true;
+		// Check if output is already connected to a cable
 		if (cable2->outputModule == cable->outputModule && cable2->outputId == cable->outputId)
 			outputWasConnected = true;
 	}
 	// Set ID if unset or collides with an existing ID
 	while (cable->id < 0 || internal->cablesCache.find(cable->id) != internal->cablesCache.end()) {
-		// Randomly generate ID
+		// Generate random 52-bit ID
 		cable->id = random::u64() % (1ull << 53);
 	}
 	// Add the cable
 	internal->cables.push_back(cable);
+	// Set default number of input/output channels
+	if (!inputWasConnected) {
+		input.channels = 1;
+	}
+	if (!outputWasConnected) {
+		output.channels = 1;
+	}
+	// Add caches
 	internal->cablesCache[cable->id] = cable;
-	Engine_updateConnected(this);
+	internal->inputCablesCache[&input].push_back(cable);
 	// Dispatch input port event
-	{
+	if (!inputWasConnected) {
 		Module::PortChangeEvent e;
 		e.connecting = true;
 		e.type = Port::INPUT;
@@ -1004,29 +974,58 @@ void Engine::removeCable(Cable* cable) {
 
 void Engine::removeCable_NoLock(Cable* cable) {
 	assert(cable);
+	Input& input = cable->inputModule->inputs[cable->inputId];
+	Output& output = cable->outputModule->outputs[cable->outputId];
 	// Check that the cable is already added
 	auto it = std::find(internal->cables.begin(), internal->cables.end(), cable);
 	assert(it != internal->cables.end());
-	// Remove the cable
+	// Remove cable caches
+	{
+		auto& v = internal->inputCablesCache[&input];
+		auto it = std::find(v.begin(), v.end(), cable);
+		assert(it != v.end());
+		v.erase(it);
+		// Remove input from cache if no cables are connected
+		if (v.empty()) {
+			internal->inputCablesCache.erase(&input);
+		}
+	}
 	internal->cablesCache.erase(cable->id);
+	// Remove cable
 	internal->cables.erase(it);
-	Engine_updateConnected(this);
+	// Check if input/output is still connected to a cable
+	bool inputIsConnected = false;
 	bool outputIsConnected = false;
 	for (Cable* cable2 : internal->cables) {
-		// Get connected status of output, to decide whether we need to call a PortChangeEvent.
-		// It's best to not trust `cable->outputModule->outputs[cable->outputId]->isConnected()`
-		if (cable2->outputModule == cable->outputModule && cable2->outputId == cable->outputId)
+		if (cable2->inputModule == cable->inputModule && cable2->inputId == cable->inputId) {
+			inputIsConnected = true;
+		}
+		if (cable2->outputModule == cable->outputModule && cable2->outputId == cable->outputId) {
 			outputIsConnected = true;
+		}
+	}
+	// Set input as disconnected if disconnected from all cables
+	if (!inputIsConnected) {
+		input.channels = 0;
+		// Clear input values
+		for (uint8_t c = 0; c < PORT_MAX_CHANNELS; c++) {
+			input.setVoltage(0.f, c);
+		}
+	}
+	// Set output as disconnected if disconnected from all cables
+	if (!outputIsConnected) {
+		output.channels = 0;
+		// Don't clear output values
 	}
 	// Dispatch input port event
-	{
+	if (!inputIsConnected) {
 		Module::PortChangeEvent e;
 		e.connecting = false;
 		e.type = Port::INPUT;
 		e.portId = cable->inputId;
 		cable->inputModule->onPortChange(e);
 	}
-	// Dispatch output port event if its state went from connected to disconnected.
+	// Dispatch output port event
 	if (!outputIsConnected) {
 		Module::PortChangeEvent e;
 		e.connecting = false;
@@ -1046,6 +1045,8 @@ bool Engine::hasCable(Cable* cable) {
 
 
 Cable* Engine::getCable(int64_t cableId) {
+	if (cableId < 0)
+		return NULL;
 	SharedLock<SharedMutex> lock(internal->mutex);
 	auto it = internal->cablesCache.find(cableId);
 	if (it == internal->cablesCache.end())
@@ -1214,11 +1215,8 @@ json_t* Engine::toJson() {
 
 
 void Engine::fromJson(json_t* rootJ) {
-	// Don't write-lock the entire method because most of it doesn't need it.
-
-	// Write-locks
-	clear();
 	// modules
+	std::vector<Module*> modules;
 	json_t* modulesJ = json_object_get(rootJ, "modules");
 	if (!modulesJ)
 		return;
@@ -1232,7 +1230,6 @@ void Engine::fromJson(json_t* rootJ) {
 		}
 		catch (Exception& e) {
 			WARN("Cannot load model: %s", e.what());
-			APP->patch->log(e.what());
 			continue;
 		}
 
@@ -1242,23 +1239,29 @@ void Engine::fromJson(json_t* rootJ) {
 		assert(module);
 
 		try {
-			// This doesn't need a lock because the Module is not added to the Engine yet.
 			module->fromJson(moduleJ);
 
 			// Before 1.0, the module ID was the index in the "modules" array
 			if (module->id < 0) {
 				module->id = moduleIndex;
 			}
-
-			// Write-locks
-			addModule(module);
 		}
 		catch (Exception& e) {
 			WARN("Cannot load module: %s", e.what());
-			APP->patch->log(e.what());
 			delete module;
 			continue;
 		}
+
+		modules.push_back(module);
+	}
+
+	std::lock_guard<SharedMutex> lock(internal->mutex);
+
+	clear_NoLock();
+
+	// Add modules
+	for (Module* module : modules) {
+		addModule_NoLock(module);
 	}
 
 	// cables
@@ -1282,13 +1285,11 @@ void Engine::fromJson(json_t* rootJ) {
 				cable->id = cableIndex;
 			}
 
-			// Write-locks
-			addCable(cable);
+			addCable_NoLock(cable);
 		}
 		catch (Exception& e) {
 			WARN("Cannot load cable: %s", e.what());
 			delete cable;
-			// Don't log exceptions because missing modules create unnecessary complaining when cables try to connect to them.
 			continue;
 		}
 	}
@@ -1296,8 +1297,8 @@ void Engine::fromJson(json_t* rootJ) {
 	// masterModule
 	json_t* masterModuleIdJ = json_object_get(rootJ, "masterModuleId");
 	if (masterModuleIdJ) {
-		Module* masterModule = getModule(json_integer_value(masterModuleIdJ));
-		setMasterModule(masterModule);
+		Module* masterModule = getModule_NoLock(json_integer_value(masterModuleIdJ));
+		setMasterModule_NoLock(masterModule);
 	}
 }
 
@@ -1306,9 +1307,7 @@ void EngineWorker::run() {
 	// Configure thread
 	contextSet(engine->internal->context);
 	system::setThreadName(string::f("Worker %d", id));
-#if defined ARCH_X64
-	initMXCSR();
-#endif
+	system::resetFpuFlags();
 	random::init();
 
 	while (true) {

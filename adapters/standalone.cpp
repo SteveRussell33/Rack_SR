@@ -59,7 +59,7 @@ int main(int argc, char* argv[]) {
 	// Handle will be closed by Windows when the process ends
 	HANDLE instanceMutex = CreateMutexW(NULL, true, string::UTF8toUTF16(APP_NAME).c_str());
 	if (GetLastError() == ERROR_ALREADY_EXISTS) {
-		osdialog_message(OSDIALOG_ERROR, OSDIALOG_OK, "Rack is already running. Multiple Rack instances are not supported.");
+		osdialog_message(OSDIALOG_ERROR, OSDIALOG_OK, "VCV Rack is already running. Multiple Rack instances are not supported.");
 		exit(1);
 	}
 	(void) instanceMutex;
@@ -129,6 +129,7 @@ int main(int argc, char* argv[]) {
 
 	// Initialize environment
 	system::init();
+	system::resetFpuFlags();
 	asset::init();
 	if (!settings::devMode) {
 		logger::logPath = asset::user("log.txt");
@@ -182,7 +183,7 @@ int main(int argc, char* argv[]) {
 	// Check existence of the system res/ directory
 	std::string resDir = asset::system("res");
 	if (!system::isDirectory(resDir)) {
-		std::string message = string::f("Rack's resource directory \"%s\" does not exist. Make sure Rack is correctly installed and launched.", resDir.c_str());
+		std::string message = string::f("VCV Rack's resource directory \"%s\" does not exist. Make sure Rack is correctly installed and launched.", resDir.c_str());
 		osdialog_message(OSDIALOG_ERROR, OSDIALOG_OK, message.c_str());
 		exit(1);
 	}
@@ -192,6 +193,13 @@ int main(int argc, char* argv[]) {
 	INFO("Initializing audio");
 	audio::init();
 	rtaudioInit();
+#if defined ARCH_MAC
+	if (rtaudioIsMicrophoneBlocked()) {
+		std::string msg = "VCV Rack cannot access audio input because Microphone permission is blocked.";
+		msg += "\n\nGive permission to Rack by opening Apple's System Settings and enabling Privacy & Security > Microphone > " + APP_NAME + " " + APP_VERSION_MAJOR + " " + APP_EDITION_NAME + ".";
+		osdialog_message(OSDIALOG_ERROR, OSDIALOG_OK, msg.c_str());
+	}
+#endif
 	INFO("Initializing MIDI");
 	midi::init();
 	rtmidiInit();
@@ -243,7 +251,7 @@ int main(int argc, char* argv[]) {
 #endif
 
 	// Initialize patch
-	if (logger::wasTruncated() && osdialog_message(OSDIALOG_INFO, OSDIALOG_YES_NO, "Rack crashed during the last session, possibly due to a buggy module in your patch. Clear your patch and start over?")) {
+	if (logger::wasTruncated() && osdialog_message(OSDIALOG_INFO, OSDIALOG_YES_NO, "VCV Rack crashed during the last session, possibly due to a buggy module in your patch. Clear your patch and start over?")) {
 		// Do nothing, which leaves a blank patch
 	}
 	else {
