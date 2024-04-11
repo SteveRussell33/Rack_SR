@@ -1,6 +1,6 @@
 RACK_DIR ?= .
 VERSION_MAJOR := 2
-VERSION := 2.4.1
+VERSION := $(shell jq -r .version Core.json)
 
 FLAGS += -Iinclude -Idep/include
 
@@ -43,9 +43,11 @@ ifdef ARCH_MAC
 	SED := sed -i ''
 	TARGET := libRack.dylib
 
+	SOURCES += $(wildcard src/*.m src/*/*.m)
+	SOURCES += $(wildcard src/*.mm src/*/*.mm)
 	SOURCES += dep/osdialog/osdialog_mac.m
 	LDFLAGS += -lpthread -ldl
-	LDFLAGS += -framework SystemConfiguration -framework Cocoa -framework OpenGL -framework IOKit -framework CoreVideo -framework CoreAudio -framework CoreMIDI
+	LDFLAGS += -framework SystemConfiguration -framework Cocoa -framework OpenGL -framework IOKit -framework CoreVideo -framework CoreAudio -framework CoreMIDI -framework AVFoundation
 	LDFLAGS += -Wl,-all_load
 	LDFLAGS += dep/lib/libGLEW.a dep/lib/libglfw3.a dep/lib/libjansson.a dep/lib/libcurl.a dep/lib/libssl.a dep/lib/libcrypto.a -Wl,-load_hidden,dep/lib/libarchive.a -Wl,-load_hidden,dep/lib/libzstd.a dep/lib/libspeexdsp.a dep/lib/libsamplerate.a -Wl,-load_hidden,dep/lib/librtmidi.a -Wl,-load_hidden,dep/lib/librtaudio.a
 endif
@@ -205,7 +207,7 @@ ifdef ARCH_MAC
 	cp plugins/Fundamental/dist/Fundamental-*.vcvplugin dist/"$(DIST_BUNDLE)"/Contents/Resources/Fundamental.vcvplugin
 	# Clean up and sign bundle
 	xattr -cr dist/"$(DIST_BUNDLE)"
-	codesign --verbose --sign "Developer ID Application: Andrew Belt (VRF26934X5)" --options runtime --entitlements Entitlements.plist --timestamp --deep dist/"$(DIST_BUNDLE)"/Contents/Resources/$(TARGET) dist/"$(DIST_BUNDLE)"
+	codesign --verbose --sign "Developer ID Application: Andrew Belt (V8SW9J626X)" --options runtime --entitlements Entitlements.plist --timestamp --deep dist/"$(DIST_BUNDLE)"/Contents/Resources/$(TARGET) dist/"$(DIST_BUNDLE)"
 	codesign --verify --deep --strict --verbose=2 dist/"$(DIST_BUNDLE)"
 	# Make standalone PKG
 	mkdir -p dist/Component
@@ -268,16 +270,8 @@ endif
 # Target not supported for public use
 notarize:
 ifdef ARCH_MAC
-	xcrun altool --notarize-app --primary-bundle-id "com.vcvrack.rack" --username "andrew@vcvrack.com" --password @keychain:notarize --output-format xml --file dist/"$(DIST_NAME)".pkg > dist/UploadInfo.plist
-	# Wait for Apple's servers to approve the app
-	while true; do \
-		echo "Waiting on Apple servers..." ; \
-		sleep 10 ; \
-		xcrun altool --notarization-info `/usr/libexec/PlistBuddy -c "Print :notarization-upload:RequestUUID" dist/UploadInfo.plist` -u "andrew@vcvrack.com" -p @keychain:notarize --output-format xml > dist/RequestInfo.plist ; \
-		if [ "`/usr/libexec/PlistBuddy -c "Print :notarization-info:Status" dist/RequestInfo.plist`" != "in progress" ]; then \
-			break ; \
-		fi ; \
-	done
+	# Submit installer package to Apple
+	xcrun notarytool submit --keychain-profile "VCV" --wait dist/"$(DIST_NAME)".pkg
 	# Mark app as notarized
 	xcrun stapler staple dist/"$(DIST_NAME)".pkg
 	# Check notarization

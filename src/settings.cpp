@@ -53,14 +53,10 @@ bool preferDarkPanels = false;
 float autosaveInterval = 15.0;
 bool skipLoadOnLaunch = false;
 std::list<std::string> recentPatchPaths;
-std::vector<NVGcolor> cableColors = {
-	color::fromHexString("#f3374b"), // red
-	color::fromHexString("#ffb437"), // yellow
-	color::fromHexString("#00b56e"), // green
-	color::fromHexString("#3695ef"), // blue
-	color::fromHexString("#8b4ade"), // purple
-};
+bool cableAutoRotate = true;
+std::vector<NVGcolor> cableColors;
 bool autoCheckUpdates = true;
+bool verifyHttpsCerts = true;
 bool showTipsOnLaunch = true;
 int tipIndex = -1;
 BrowserSort browserSort = BROWSER_SORT_UPDATED;
@@ -98,8 +94,20 @@ bool isModuleWhitelisted(const std::string& pluginSlug, const std::string& modul
 }
 
 
+void cableColorsReset() {
+	cableColors = {
+		color::fromHexString("#f3374b"), // red
+		color::fromHexString("#ffb437"), // yellow
+		color::fromHexString("#00b56e"), // green
+		color::fromHexString("#3695ef"), // blue
+		color::fromHexString("#8b4ade"), // purple
+	};
+}
+
+
 void init() {
 	settingsPath = asset::user("settings.json");
+	cableColorsReset();
 }
 
 
@@ -185,7 +193,11 @@ json_t* toJson() {
 	}
 	json_object_set_new(rootJ, "cableColors", cableColorsJ);
 
+	json_object_set_new(rootJ, "cableAutoRotate", json_boolean(cableAutoRotate));
+
 	json_object_set_new(rootJ, "autoCheckUpdates", json_boolean(autoCheckUpdates));
+
+	json_object_set_new(rootJ, "verifyHttpsCerts", json_boolean(verifyHttpsCerts));
 
 	json_object_set_new(rootJ, "showTipsOnLaunch", json_boolean(showTipsOnLaunch));
 
@@ -407,9 +419,17 @@ void fromJson(json_t* rootJ) {
 		}
 	}
 
+	json_t* cableAutoRotateJ = json_object_get(rootJ, "cableAutoRotate");
+	if (cableAutoRotateJ)
+		cableAutoRotate = json_boolean_value(cableAutoRotateJ);
+
 	json_t* autoCheckUpdatesJ = json_object_get(rootJ, "autoCheckUpdates");
 	if (autoCheckUpdatesJ)
 		autoCheckUpdates = json_boolean_value(autoCheckUpdatesJ);
+
+	json_t* verifyHttpsCertsJ = json_object_get(rootJ, "verifyHttpsCerts");
+	if (verifyHttpsCertsJ)
+		verifyHttpsCerts = json_boolean_value(verifyHttpsCertsJ);
 
 	json_t* showTipsOnLaunchJ = json_object_get(rootJ, "showTipsOnLaunch");
 	if (showTipsOnLaunchJ)
