@@ -115,34 +115,34 @@ $(jansson): | jansson-2.14
 	$(MAKE) -C jansson-2.14
 	$(MAKE) -C jansson-2.14 install
 
-openssl-1.1.1k:
-	$(WGET) "https://www.openssl.org/source/openssl-1.1.1k.tar.gz"
-	$(SHA256) openssl-1.1.1k.tar.gz 892a0875b9872acd04a9fde79b1f943075d5ea162415de3047c327df33fbaee5
-	$(UNTAR) openssl-1.1.1k.tar.gz
-	rm openssl-1.1.1k.tar.gz
+# openssl-1.1.1k:
+# 	$(WGET) "https://www.openssl.org/source/openssl-1.1.1k.tar.gz"
+# 	$(SHA256) openssl-1.1.1k.tar.gz 892a0875b9872acd04a9fde79b1f943075d5ea162415de3047c327df33fbaee5
+# 	$(UNTAR) openssl-1.1.1k.tar.gz
+# 	rm openssl-1.1.1k.tar.gz
 
-$(openssl): | openssl-1.1.1k
-	# The CFLAGS environment variable is ignored, so pass CFLAGS to their custom ./config script, which passes them to the compiler.
-	# Set no-pinshared so OpenSSL doesn't call GetModuleHandleEx(GET_MODULE_HANDLE_EX_FLAG_PIN, ...) on initialization on Windows. This prevents libRack from being unloaded on Windows with FreeLibrary().
-	cd openssl-1.1.1k && ./config --prefix="$(DEP_PATH)" no-shared no-hw threads no-zlib no-capieng no-pinshared $(CFLAGS)
-	$(MAKE) -C openssl-1.1.1k
-	$(MAKE) -C openssl-1.1.1k install_sw
+# $(openssl): | openssl-1.1.1k
+# 	# The CFLAGS environment variable is ignored, so pass CFLAGS to their custom ./config script, which passes them to the compiler.
+# 	# Set no-pinshared so OpenSSL doesn't call GetModuleHandleEx(GET_MODULE_HANDLE_EX_FLAG_PIN, ...) on initialization on Windows. This prevents libRack from being unloaded on Windows with FreeLibrary().
+# 	cd openssl-1.1.1k && ./config --prefix="$(DEP_PATH)" no-shared no-hw threads no-zlib no-capieng no-pinshared $(CFLAGS)
+# 	$(MAKE) -C openssl-1.1.1k
+# 	$(MAKE) -C openssl-1.1.1k install_sw
 
-curl-7.79.1:
-	$(WGET) "https://github.com/curl/curl/releases/download/curl-7_79_1/curl-7.79.1.tar.gz" || $(WGET) "https://curl.se/download/curl-7.79.1.tar.gz"
-	$(SHA256) curl-7.79.1.tar.gz 370b11201349816287fb0ccc995e420277fbfcaf76206e309b3f60f0eda090c2
-	$(UNTAR) curl-7.79.1.tar.gz
-	rm curl-7.79.1.tar.gz
+# curl-7.79.1:
+# 	$(WGET) "https://github.com/curl/curl/releases/download/curl-7_79_1/curl-7.79.1.tar.gz" || $(WGET) "https://curl.se/download/curl-7.79.1.tar.gz"
+# 	$(SHA256) curl-7.79.1.tar.gz 370b11201349816287fb0ccc995e420277fbfcaf76206e309b3f60f0eda090c2
+# 	$(UNTAR) curl-7.79.1.tar.gz
+# 	rm curl-7.79.1.tar.gz
 
-CURL_FLAGS += --disable-symbol-hiding --enable-shared=no
-CURL_FLAGS += --enable-http --disable-ftp --disable-file --disable-ldap --disable-ldaps --disable-rtsp --enable-proxy --disable-dict --disable-telnet --disable-tftp --disable-pop3 --disable-imap --disable-smb --disable-smtp --disable-gopher --disable-mqtt --disable-manual --enable-threaded-resolver --enable-pthreads --enable-verbose --disable-sspi --disable-ntlm --disable-ntlm-wb --disable-tls-srp --disable-unix-sockets --disable-doh --disable-mime --disable-dateparse --disable-netrc --disable-progress-meter --disable-alt-svc
-CURL_FLAGS += --without-hyper --without-zlib --without-brotli --without-zstd --without-libpsl --without-libgsasl --without-libssh2 --without-librtmp --without-winidn --without-libidn2 --without-nghttp2 --without-ngtcp2 --without-nghttp3 --without-quiche
-CURL_FLAGS += --with-ssl="$(DEP_PATH)"
+# CURL_FLAGS += --disable-symbol-hiding --enable-shared=no
+# CURL_FLAGS += --enable-http --disable-ftp --disable-file --disable-ldap --disable-ldaps --disable-rtsp --enable-proxy --disable-dict --disable-telnet --disable-tftp --disable-pop3 --disable-imap --disable-smb --disable-smtp --disable-gopher --disable-mqtt --disable-manual --enable-threaded-resolver --enable-pthreads --enable-verbose --disable-sspi --disable-ntlm --disable-ntlm-wb --disable-tls-srp --disable-unix-sockets --disable-doh --disable-mime --disable-dateparse --disable-netrc --disable-progress-meter --disable-alt-svc
+# CURL_FLAGS += --without-hyper --without-zlib --without-brotli --without-zstd --without-libpsl --without-libgsasl --without-libssh2 --without-librtmp --without-winidn --without-libidn2 --without-nghttp2 --without-ngtcp2 --without-nghttp3 --without-quiche
+# CURL_FLAGS += --with-ssl="$(DEP_PATH)"
 
-$(libcurl): | $(openssl) curl-7.79.1
-	cd curl-7.79.1 && PKG_CONFIG_PATH= $(CONFIGURE) $(CURL_FLAGS)
-	$(MAKE) -C curl-7.79.1
-	$(MAKE) -C curl-7.79.1 install
+# $(libcurl): | $(openssl) curl-7.79.1
+# 	cd curl-7.79.1 && PKG_CONFIG_PATH= $(CONFIGURE) $(CURL_FLAGS)
+# 	$(MAKE) -C curl-7.79.1
+# 	$(MAKE) -C curl-7.79.1 install
 
 zstd-1.5.4:
  	$(WGET) "https://github.com/facebook/zstd/releases/download/v1.5.4/zstd-1.5.4.tar.gz"
@@ -266,7 +266,8 @@ $(simde): simde/simde
 
 # Helpers
 
-src: glew-2.2.0 glfw jansson-2.14 libsamplerate-0.2.2 openssl-1.1.1k curl-7.79.1 zstd-1.5.4 libarchive-3.6.2 rtaudio nanovg nanosvg oui-blendish osdialog
+#src: glew-2.2.0 glfw jansson-2.14 libsamplerate-0.2.2 openssl-1.1.1k curl-7.79.1 zstd-1.5.4 libarchive-3.6.2 rtaudio nanovg nanosvg oui-blendish osdialog
+src: glew-2.2.0 glfw jansson-2.14 libsamplerate-0.2.2 zstd-1.5.4 libarchive-3.6.2 rtaudio nanovg nanosvg oui-blendish osdialog
 
 clean:
 	git clean -fdx
