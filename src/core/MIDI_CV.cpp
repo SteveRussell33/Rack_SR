@@ -536,7 +536,7 @@ struct MIDI_CV : Module {
 
 		json_t* channelsUnisonJ = json_object_get(rootJ, "channelsUnison");
 		if (channelsUnisonJ)
-			setChannels(json_integer_value(channelsUnisonJ));
+			setUnisonChannels(json_integer_value(channelsUnisonJ));
 
 		json_t* polyModeJ = json_object_get(rootJ, "polyMode");
 		if (polyModeJ)
