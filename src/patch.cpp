@@ -253,7 +253,6 @@ void Manager::saveAutosave() {
 
 	json_dumpf(rootJ, file, JSON_INDENT(2));
 	std::fclose(file);
-	system::remove(patchPath);
 	system::rename(tmpPath, patchPath);
 }
 

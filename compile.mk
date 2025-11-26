@@ -16,7 +16,7 @@ FLAGS += -g
 # Optimization
 FLAGS += -O3 -funsafe-math-optimizations -fno-omit-frame-pointer
 # Warnings
-FLAGS += -Wall -Wextra -Wno-unused-parameter
+FLAGS += -Wall -Wextra -Wno-unused-parameter -Wno-vla-extension
 # C++ standard
 CXXFLAGS += -std=c++17
 
